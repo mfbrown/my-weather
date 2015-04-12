@@ -1,31 +1,55 @@
-var http = require('https');
+var https = require('https');
+var util = require("util");
+var EventEmitter = require("events").EventEmitter;
+var keys = require("./api-keys");
 
-var apiKey = "AIzaSyCpJzPRDbFCee5AX-cgZT41A-2u36J04mg";
+var apiKey = keys.getKey("maps");
 
-//Print out Error Messages
-function printError(error){
-  console.error(error.message);
-};
+/**
+ * An EventEmitter to get a zipcode's Latitude and Longtitude.
+ * @param username
+ * @constructor
+ */
 
-function getLatLng(zipcode){
-	http.get("https://maps.googleapis.com/maps/api/geocode/json?components=postal_code:" + zipcode + "&key=" + apiKey, function(response){
-		if(response.statusCode === 200){
-			var body = '';
-			response.on('data', function (chunk) {
-				body += chunk;
-			});
-			response.on('end', function(){
-				console.log(response.statusCode);
-				var locationData = JSON.parse(body);
-				var lat = locationData.results[0].geometry.location.lat;
-				var lng = locationData.results[0].geometry.location.lng;
-				console.log("Lat: " + lat);
-				console.log("Lng: " + lng);
-			})
-		} else {
-			printError({message: "There was an error getting the location for " + zipcode + ". (" + response.STATUS_CODES[response.statusCode] + ")." });
+/**
+ * Borrowed heavily from Treehouse (www.teamtreehouse.com) while I learn the JavaScripts
+ */
+
+function LatLng(zipcode){
+	EventEmitter.call(this);
+
+  latLngEmitter = this;
+
+	var request = https.get("https://maps.googleapis.com/maps/api/geocode/json?components=postal_code:" + zipcode + "&key=" + apiKey, function(response){
+		var body = "";
+
+		if(response.statusCode !== 200) {
+			request.abort();
+			latLngEmitter.emit("error", new Error("There was an error getting the latitude and longtitude for this zipcode."));
 		}
-	})
+
+		// Read the data
+		response.on('data', function(chunk){
+			body += chunk;
+			latLngEmitter.emit('data', chunk);
+		});
+
+		response.on('end', function(){
+			if(response.statusCode === 200) {
+				try {
+					var locationData = JSON.parse(body);
+					latLngEmitter.emit("end", locationData);
+				} catch (error) {
+					latLngEmitter.emit("error", error);
+				}
+			}
+		}).on("error", function(error){
+			latLngEmitter.emit("error", error)
+		});	
+	});
 }
 
-module.exports.getLatLng = getLatLng;
+util.inherits( LatLng, EventEmitter );
+
+module.exports = LatLng;
+
